@@ -1,7 +1,8 @@
-"""
-Miscellaneous helper functions and constants.
-"""
+"""Miscellaneous helper functions and constants."""
 
+from __future__ import annotations
+
+import csv
 import json
 import logging
 import math
@@ -14,8 +15,11 @@ import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple, Union
 
-import pandas as pd
-import requests
+try:  # pragma: no cover - optional dependency
+    import requests
+except ModuleNotFoundError:  # pragma: no cover - fallback for tests
+    requests = None  # type: ignore
+
 from dateutil import parser
 
 import algobot
@@ -54,11 +58,14 @@ def get_latest_version() -> str:
     Gets the latest Algobot version from GitHub.
     :return: Latest version.
     """
+    if requests is None:
+        return UNKNOWN
+
     url = 'https://raw.githubusercontent.com/ZENALC/algobot/master/version.txt'
     try:
         response = requests.get(url, timeout=3)
         version = response.content.decode().strip()
-    except Exception as e:
+    except Exception as e:  # pragma: no cover - network dependent
         algobot.MAIN_LOGGER.exception(repr(e))
         version = UNKNOWN
     return version
@@ -470,20 +477,42 @@ def load_from_csv(path: str, descending: bool = True) -> List[Dict[str, Union[fl
     :param descending: Boolean representing whether data is returned in descending or ascending format by date.
     :return: List of dictionaries containing open, high, low, close, and date information.
     """
-    df = pd.read_csv(path)
-    df.columns = [col.lower().strip() for col in df.columns]  # To support backwards compatibility.
-    data = df.to_dict('records')  # pylint: disable=no-member
+    with open(path, newline='', encoding='utf-8') as csv_file:
+        reader = csv.DictReader(csv_file)
+        rows: List[Dict[str, Union[float, str]]] = []
+        for row in reader:
+            normalized_row: Dict[str, Union[float, str]] = {}
+            for key, value in row.items():
+                normalized_key = key.lower().strip()
+                if value is None:
+                    normalized_row[normalized_key] = ''
+                    continue
 
-    first_date = parser.parse(data[0]['date_utc'])  # Retrieve first date from CSV data.
-    last_date = parser.parse(data[-1]['date_utc'])  # Retrieve last date from CSV data.
+                stripped_value = value.strip()
+                if normalized_key == 'date_utc':
+                    normalized_row[normalized_key] = stripped_value
+                    continue
+
+                try:
+                    normalized_row[normalized_key] = float(stripped_value)
+                except ValueError:
+                    normalized_row[normalized_key] = stripped_value
+
+            rows.append(normalized_row)
+
+    if not rows:
+        return []
+
+    first_date = parser.parse(str(rows[0]['date_utc']))
+    last_date = parser.parse(str(rows[-1]['date_utc']))
 
     if descending and first_date < last_date:
-        return data[::-1]
+        return rows[::-1]
 
     if not descending and first_date > last_date:
-        return data[::-1]
+        return rows[::-1]
 
-    return data
+    return rows
 
 
 def parse_precision(precision: str, symbol: str) -> int:
