@@ -11,8 +11,15 @@ from itertools import product
 from logging import Logger
 from typing import Dict, List, Optional
 
-import pandas as pd
-from dateutil import parser
+try:  # pragma: no cover - optional dependency
+    import pandas as pd  # type: ignore
+except Exception:  # pragma: no cover - pandas not available during tests
+    pd = None  # type: ignore[assignment]
+
+try:  # pragma: no cover - optional dependency
+    from dateutil import parser  # type: ignore
+except Exception:  # pragma: no cover - fallback imported in helpers
+    from algobot.helpers import parser  # type: ignore
 
 from algobot.enums import (BACKTEST, BEARISH, BULLISH, ENTER_LONG, ENTER_SHORT, EXIT_LONG, EXIT_SHORT, LONG, OPTIMIZER,
                            SHORT)
@@ -213,11 +220,23 @@ class Backtester(Trader):
         :return: String "CRASHED" if an error is raised, else None if everything goes smoothly.
         """
         cache = {}
-        df = pd.DataFrame(strategy_data[-250:])
-        df['high/low'] = (df['high'] + df['low']) / 2
-        df['open/close'] = (df['open'] + df['close']) / 2
-        df.columns = [c.lower() for c in df.columns]
-        input_arrays_dict = df.to_dict('series')
+        trimmed = strategy_data[-250:]
+        if pd is not None:
+            df = pd.DataFrame(trimmed)
+            df['high/low'] = (df['high'] + df['low']) / 2
+            df['open/close'] = (df['open'] + df['close']) / 2
+            df.columns = [c.lower() for c in df.columns]
+            input_arrays_dict = df.to_dict('series')
+        else:
+            input_arrays_dict = {}
+            for key in trimmed[0].keys():
+                input_arrays_dict[key.lower()] = [row[key] for row in trimmed]
+            input_arrays_dict['high/low'] = [
+                (row['high'] + row['low']) / 2 for row in trimmed
+            ]
+            input_arrays_dict['open/close'] = [
+                (row['open'] + row['close']) / 2 for row in trimmed
+            ]
 
         for strategy in self.strategies.values():
             try:
@@ -504,6 +523,9 @@ class Backtester(Trader):
         headers = ['Profit Percentage', 'Stop Loss Strategy', 'Stop Loss Percentage', 'Take Profit Strategy',
                    'Take Profit Percentage', 'Ticker', 'Interval', 'Strategy Interval', 'Trades', 'Run',
                    'Result', 'Strategy']
+        if pd is None:
+            raise RuntimeError('Pandas is required to export optimizer rows.')
+
         df = pd.DataFrame(self.optimizer_rows)
         df.columns = headers
         df.set_index('Run', inplace=True)

@@ -11,7 +11,11 @@ from logging import Logger
 from typing import Dict, List, Tuple, Union
 
 import binance
-import pandas as pd
+
+try:  # pragma: no cover - optional dependency
+    import pandas as pd  # type: ignore
+except Exception:  # pragma: no cover - pandas not available during tests
+    pd = None  # type: ignore[assignment]
 
 from algobot.helpers import ROOT_DIR, SHORT_INTERVAL_MAP, get_logging_object, get_normalized_data
 from algobot.typing_hints import DataType
@@ -557,14 +561,24 @@ class Data:
         if not data:
             raise RuntimeError("No data to create CSV with found.")
 
-        if descending:
-            data = data[::-1]
+        data = sorted(data, key=lambda row: row['date_utc'], reverse=descending)
 
         date_formatting = "%m/%d/%Y %H:%M" if army_time else "%m/%d/%Y %I:%M %p"
 
-        df = pd.DataFrame(data)
-        df['date_utc'] = df['date_utc'].apply(lambda x: x.strftime(date_formatting))
-        df.to_csv(file_path, index=False)  # noqa
+        if pd is None:
+            import csv
+
+            with open(file_path, 'w', encoding='utf-8', newline='') as csv_file:
+                writer = csv.DictWriter(csv_file, fieldnames=data[0].keys(), lineterminator='\n')
+                writer.writeheader()
+                for row in data:
+                    formatted_row = dict(row)
+                    formatted_row['date_utc'] = row['date_utc'].strftime(date_formatting)
+                    writer.writerow(formatted_row)
+        else:
+            df = pd.DataFrame(data)
+            df['date_utc'] = df['date_utc'].apply(lambda x: x.strftime(date_formatting))
+            df.to_csv(file_path, index=False)  # noqa
 
         return file_path
 

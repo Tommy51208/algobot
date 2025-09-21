@@ -8,7 +8,22 @@ import math
 from datetime import datetime
 from typing import Dict, List, Tuple, Union
 
-import numpy as np
+try:  # pragma: no cover - optional dependency
+    import numpy as np  # type: ignore
+except Exception:  # pragma: no cover - fallback implementation for tests
+    class _NumpyStub:
+        @staticmethod
+        def std(values, ddof=0):  # type: ignore[no-untyped-def]
+            if not values:
+                raise ValueError("std() requires at least one data point")
+            n = len(values)
+            if n - ddof <= 0:
+                raise ValueError("ddof is too large")
+            mean = sum(values) / n
+            variance = sum((value - mean) ** 2 for value in values) / (n - ddof)
+            return variance ** 0.5
+
+    np = _NumpyStub()  # type: ignore[assignment]
 
 from algobot.helpers import get_data_from_parameter
 
