@@ -6,10 +6,18 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 if TYPE_CHECKING:
     from algobot.traders.trader import Trader
 
-import numpy as np
-import pandas as pd
+try:  # pragma: no cover - optional dependencies
+    import numpy as np  # type: ignore
+    import pandas as pd  # type: ignore
+    from talib import abstract  # type: ignore
+    _CUSTOM_DEPENDENCIES_AVAILABLE = True
+except Exception:  # pragma: no cover - provide lightweight fallback for tests
+    np = None  # type: ignore[assignment]
+    pd = None  # type: ignore[assignment]
+    abstract = None  # type: ignore[assignment]
+    _CUSTOM_DEPENDENCIES_AVAILABLE = False
+
 from PyQt5.QtWidgets import QWidget
-from talib import abstract
 
 from algobot.enums import BEARISH, BULLISH, ENTER_LONG, ENTER_SHORT, EXIT_LONG, EXIT_SHORT, TRENDS
 from algobot.helpers import get_random_color
@@ -33,6 +41,9 @@ class CustomStrategy:
          for remaining indicators in a trend when one indicator in that trend is already false. One drawback of this is
          that the user will lose support for viewing non-calculated statistics.
         """
+        if not _CUSTOM_DEPENDENCIES_AVAILABLE:
+            raise RuntimeError('CustomStrategy requires numpy, pandas, and TA-Lib to be installed.')
+
         self.trader = trader
         self.precision = precision
         self.short_circuit = short_circuit

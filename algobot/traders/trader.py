@@ -7,7 +7,10 @@ from typing import Any, Dict, List, Union
 
 from algobot.enums import BEARISH, BULLISH, ENTER_LONG, ENTER_SHORT, EXIT_LONG, EXIT_SHORT, LONG, SHORT, STOP, TRAILING
 from algobot.helpers import get_label_string
-from algobot.strategies.custom import CustomStrategy
+try:  # pragma: no cover - optional dependency
+    from algobot.strategies.custom import CustomStrategy  # type: ignore
+except Exception:  # pragma: no cover - allow tests without GUI dependencies
+    CustomStrategy = None  # type: ignore[assignment]
 
 
 class Trader:
@@ -199,6 +202,9 @@ class Trader:
         :param short_circuit: Whether you want to short circuit strategy or not. More documentation can be found in
          the Custom strategy class.
         """
+        if CustomStrategy is None and strategies:
+            raise RuntimeError('Custom strategies require optional dependencies that are not installed.')
+
         if not isinstance(strategies, list):
             strategies = [strategies]
 

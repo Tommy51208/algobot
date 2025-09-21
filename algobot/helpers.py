@@ -14,9 +14,41 @@ import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple, Union
 
-import pandas as pd
-import requests
-from dateutil import parser
+try:  # pragma: no cover - optional dependency
+    import pandas as pd  # type: ignore
+except Exception:  # pragma: no cover - used in tests without pandas
+    pd = None  # type: ignore[assignment]
+
+try:  # pragma: no cover - optional dependency
+    import requests  # type: ignore
+except Exception:  # pragma: no cover - fall back to None
+    requests = None  # type: ignore[assignment]
+
+try:  # pragma: no cover - optional dependency
+    from dateutil import parser  # type: ignore
+except Exception:  # pragma: no cover - minimal fallback for tests
+    from datetime import datetime as _dt
+
+    class _ParserModule:
+        """Minimal dateutil.parse fallback supporting common formats used in tests."""
+
+        FORMATS = (
+            "%m/%d/%Y %I:%M %p",
+            "%m/%d/%y %I:%M %p",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M",
+        )
+
+        @staticmethod
+        def parse(value: str):  # type: ignore[no-untyped-def]
+            for fmt in _ParserModule.FORMATS:
+                try:
+                    return _dt.strptime(value, fmt)
+                except ValueError:
+                    continue
+            return _dt.fromisoformat(value)
+
+    parser = _ParserModule()  # type: ignore[assignment]
 
 import algobot
 from algobot.typing_hints import DictType
@@ -470,9 +502,25 @@ def load_from_csv(path: str, descending: bool = True) -> List[Dict[str, Union[fl
     :param descending: Boolean representing whether data is returned in descending or ascending format by date.
     :return: List of dictionaries containing open, high, low, close, and date information.
     """
-    df = pd.read_csv(path)
-    df.columns = [col.lower().strip() for col in df.columns]  # To support backwards compatibility.
-    data = df.to_dict('records')  # pylint: disable=no-member
+    if pd is not None:
+        df = pd.read_csv(path)  # type: ignore[call-arg]
+        df.columns = [col.lower().strip() for col in df.columns]  # To support backwards compatibility.
+        data = df.to_dict('records')  # pylint: disable=no-member
+    else:
+        import csv
+
+        with open(path, encoding='utf-8') as csv_file:
+            reader = csv.DictReader(csv_file)
+            data = []
+            for row in reader:
+                normalized_row = {}
+                for key, value in row.items():
+                    key = key.lower().strip()
+                    if key == 'date_utc':
+                        normalized_row[key] = value.strip()
+                    else:
+                        normalized_row[key] = float(value)
+                data.append(normalized_row)
 
     first_date = parser.parse(data[0]['date_utc'])  # Retrieve first date from CSV data.
     last_date = parser.parse(data[-1]['date_utc'])  # Retrieve last date from CSV data.

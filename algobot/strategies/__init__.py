@@ -7,7 +7,17 @@ from os import listdir
 from os.path import basename, dirname
 from typing import Any, Callable, List, Type
 
-import talib
+try:  # pragma: no cover - optional dependency
+    import talib  # type: ignore
+    _TALIB_AVAILABLE = True
+except Exception:  # pragma: no cover - TA-Lib not available during tests
+    _TALIB_AVAILABLE = False
+
+    class _TalibStub:
+        def __getattr__(self, item):  # type: ignore[no-untyped-def]
+            raise RuntimeError('TA-Lib is required for technical indicator strategies.')
+
+    talib = _TalibStub()  # type: ignore[assignment]
 
 # This is importing all strategies within the current working directory. We ignore __init__ and custom.py
 __all__ = [basename(f)[:-3] for f in listdir(dirname(__file__)) if f[-3:] == ".py"
@@ -161,4 +171,4 @@ class TALIBMap:
         return getattr(self, parsed)
 
 
-TALIB_MAP_SINGLETON = TALIBMap()
+TALIB_MAP_SINGLETON = TALIBMap() if _TALIB_AVAILABLE else None
